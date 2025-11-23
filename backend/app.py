@@ -6,42 +6,45 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Caminho do banco SQLite dentro do backend
+# Caminho seguro para o banco (Render + local)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "mensagens.db")
 
-# -------------------------------------------------
-# Criar tabela automaticamente
-# -------------------------------------------------
+
+# -------------------------------------------
+# INICIAR BANCO SE NÃO EXISTIR
+# -------------------------------------------
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS mensagens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
             mensagem TEXT NOT NULL
-        )
+        );
     """)
-
     conn.commit()
     conn.close()
+
 
 init_db()
 
 
-# -------------------------------------------------
-# ROTA PRINCIPAL (para não dar 404 no Render)
-# -------------------------------------------------
+# -------------------------------------------
+# ROTA RAIZ (TESTE)
+# -------------------------------------------
 @app.get("/")
 def home():
-    return jsonify({"status": "API rodando!", "rotas": ["/add", "/mensagens"]})
+    return jsonify({
+        "status": "API rodando!",
+        "rotas": ["/add", "/mensagens"]
+    })
 
 
-# -------------------------------------------------
-# ROTA PARA ADICIONAR MENSAGEM
-# -------------------------------------------------
+# -------------------------------------------
+# ADICIONAR MENSAGEM
+# -------------------------------------------
 @app.post("/add")
 def add_msg():
     data = request.get_json()
@@ -50,42 +53,38 @@ def add_msg():
     mensagem = data.get("mensagem")
 
     if not nome or not mensagem:
-        return jsonify({"erro": "Preencha nome e mensagem"}), 400
+        return jsonify({"erro": "Nome e mensagem são obrigatórios"}), 400
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
     cursor.execute(
         "INSERT INTO mensagens (nome, mensagem) VALUES (?, ?)",
         (nome, mensagem)
     )
-
     conn.commit()
     conn.close()
 
-    return jsonify({"status": "Mensagem registrada com sucesso!"})
+    return jsonify({"status": "Mensagem adicionada"})
 
 
-# -------------------------------------------------
-# ROTA PARA LISTAR TODAS AS MENSAGENS
-# -------------------------------------------------
+# -------------------------------------------
+# LISTAR MENSAGENS
+# -------------------------------------------
 @app.get("/mensagens")
 def listar_msg():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
     cursor.execute("SELECT nome, mensagem FROM mensagens ORDER BY id DESC")
-    dados = cursor.fetchall()
-
+    rows = cursor.fetchall()
     conn.close()
 
-    lista = [{"nome": n, "mensagem": m} for n, m in dados]
-    return jsonify(lista)
+    dados = [{"nome": r[0], "mensagem": r[1]} for r in rows]
+    return jsonify(dados)
 
 
-# -------------------------------------------------
-# INICIAR SERVIDOR — compatível com Render
-# -------------------------------------------------
+# -------------------------------------------
+# RODAR API (Render usa PORT)
+# -------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)

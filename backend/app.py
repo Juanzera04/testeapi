@@ -2,48 +2,64 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import psycopg2
 import os
+import urllib.parse as urlparse
 
 app = Flask(__name__)
 CORS(app)
 
 # -------------------------------------------
-# CONFIGURAÇÃO DO BANCO (Com suas credenciais)
+# CONFIGURAÇÃO DO BANCO (PostgreSQL no Render)
 # -------------------------------------------
 def get_db_connection():
-    # No Render, usa DATABASE_URL automaticamente
-    # Para desenvolvimento, use a URL externa que você recebeu
-    database_url = os.environ.get('DATABASE_URL', 'postgresql://admin:dMoMPubwqoeu2nDL9ufmnMsld8sMMXnu@dpg-d4i49r8gjchc73dkstu0-a.oregon-postgres.render.com/mensagens_db_txyh')
+    # No Render, usa DATABASE_URL; localmente pode usar variável de ambiente
+    database_url = os.environ.get('DATABASE_URL')
     
-    try:
+    if database_url:
+        # Parse da URL do PostgreSQL
+        url = urlparse.urlparse(database_url)
+        dbname = url.path[1:]
+        user = url.username
+        password = url.password
+        host = url.hostname
+        port = url.port
+        
         conn = psycopg2.connect(
-            database_url,
+            dbname=dbname,
+            user=user,
+            password=password,
+            host=host,
+            port=port,
             sslmode='require'
         )
-        return conn
-    except Exception as e:
-        print(f"Erro ao conectar com o banco: {e}")
-        raise
+    else:
+        # Fallback para desenvolvimento local
+        conn = psycopg2.connect(
+            dbname='mensagens_db',
+            user='postgres',
+            password='sua_senha_local',
+            host='localhost',
+            port='5432'
+        )
+    
+    return conn
 
 # -------------------------------------------
 # INICIAR BANCO (PostgreSQL)
 # -------------------------------------------
 def init_db():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS mensagens (
-                id SERIAL PRIMARY KEY,
-                nome TEXT NOT NULL,
-                mensagem TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.commit()
-        print("Tabela 'mensagens' verificada/criada com sucesso!")
-        conn.close()
-    except Exception as e:
-        print(f"Erro ao inicializar banco: {e}")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS mensagens (
+            id SERIAL PRIMARY KEY,
+            nome TEXT NOT NULL,
+            mensagem TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+    conn.commit()
+    conn.close()
+    print("✅ Tabela 'mensagens' verificada/criada com sucesso!")
 
 init_db()
 
@@ -116,7 +132,7 @@ def health_check():
         conn.close()
         return jsonify({"status": "healthy", "database": "connected"})
     except Exception as e:
-        return jsonify({"status": "unhealthy", "database": "disconnected"}), 500
+        return jsonify({"status": "unhealthy", "database": "disconnected", "erro": str(e)}), 500
 
 # -------------------------------------------
 # RODAR API
